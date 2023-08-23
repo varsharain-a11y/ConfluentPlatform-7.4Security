@@ -40,3 +40,65 @@
      systemctl status krb5kdc
      systemctl restart kadmin
      systemctl status kadmin
+
+
+Creating principals for users:
+>> sudo kadmin.local -q "add_principal -randkey reader@KAFKA.SECURE"
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+No policy specified for reader@KAFKA.SECURE; defaulting to no policy
+Principal "reader@KAFKA.SECURE" created.
+
+>># sudo kadmin.local -q "add_principal -randkey writer@KAFKA.SECURE"
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+No policy specified for writer@KAFKA.SECURE; defaulting to no policy
+Principal "writer@KAFKA.SECURE" created.
+
+>> # sudo kadmin.local -q "add_principal -randkey admin@KAFKA.SECURE"
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+No policy specified for admin@KAFKA.SECURE; defaulting to no policy
+Principal "admin@KAFKA.SECURE" created.
+
+Create principal for kafka service:
+>> sudo kadmin.local -q "add_principal -randkey kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE"
+
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+No policy specified for kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE; defaulting to no policy
+Principal "kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE" created.
+
+
+Export principals to keytab files 
+[root@kerberos ~]# kadmin.local -q "xst -kt /tmp/reader.user.keytab reader@KAFKA.SECURE"
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+Entry for principal reader@KAFKA.SECURE with kvno 3, encryption type aes256-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/reader.user.keytab.
+Entry for principal reader@KAFKA.SECURE with kvno 3, encryption type aes128-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/reader.user.keytab.
+Entry for principal reader@KAFKA.SECURE with kvno 3, encryption type arcfour-hmac added to keytab WRFILE:/tmp/reader.user.keytab.
+Entry for principal reader@KAFKA.SECURE with kvno 3, encryption type camellia256-cts-cmac added to keytab WRFILE:/tmp/reader.user.keytab.
+Entry for principal reader@KAFKA.SECURE with kvno 3, encryption type camellia128-cts-cmac added to keytab WRFILE:/tmp/reader.user.keytab.
+[root@kerberos ~]# kadmin.local -q "xst -kt /tmp/writer.user.keytab writer@KAFKA.SECURE"
+
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+Entry for principal writer@KAFKA.SECURE with kvno 4, encryption type aes256-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/writer.user.keytab.
+Entry for principal writer@KAFKA.SECURE with kvno 4, encryption type aes128-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/writer.user.keytab.
+Entry for principal writer@KAFKA.SECURE with kvno 4, encryption type arcfour-hmac added to keytab WRFILE:/tmp/writer.user.keytab.
+Entry for principal writer@KAFKA.SECURE with kvno 4, encryption type camellia256-cts-cmac added to keytab WRFILE:/tmp/writer.user.keytab.
+Entry for principal writer@KAFKA.SECURE with kvno 4, encryption type camellia128-cts-cmac added to keytab WRFILE:/tmp/writer.user.keytab.
+[root@kerberos ~]# kadmin.local -q "xst -kt /tmp/admin.user.keytab admin@KAFKA.SECURE"
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+Entry for principal admin@KAFKA.SECURE with kvno 3, encryption type aes256-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/admin.user.keytab.
+Entry for principal admin@KAFKA.SECURE with kvno 3, encryption type aes128-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/admin.user.keytab.
+Entry for principal admin@KAFKA.SECURE with kvno 3, encryption type arcfour-hmac added to keytab WRFILE:/tmp/admin.user.keytab.
+Entry for principal admin@KAFKA.SECURE with kvno 3, encryption type camellia256-cts-cmac added to keytab WRFILE:/tmp/admin.user.keytab.
+Entry for principal admin@KAFKA.SECURE with kvno 3, encryption type camellia128-cts-cmac added to keytab WRFILE:/tmp/admin.user.keytab.
+[root@kerberos ~]# kadmin.local -q "xst -kt /tmp/kafka.service.keytab kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE"
+Authenticating as principal root/admin@KAFKA.SECURE with password.
+Entry for principal kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE with kvno 3, encryption type aes256-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/kafka.service.keytab.
+Entry for principal kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE with kvno 3, encryption type aes128-cts-hmac-sha1-96 added to keytab WRFILE:/tmp/kafka.service.keytab.
+Entry for principal kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE with kvno 3, encryption type arcfour-hmac added to keytab WRFILE:/tmp/kafka.service.keytab.
+Entry for principal kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE with kvno 3, encryption type camellia256-cts-cmac added to keytab WRFILE:/tmp/kafka.service.keytab.
+Entry for principal kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE with kvno 3, encryption type camellia128-cts-cmac added to keytab WRFILE:/tmp/kafka.service.keytab.
+[root@kerberos ~]# ll /tmp/*.keytab
+-rw-------. 1 root root 334 Aug 23 12:15 /tmp/admin.user.keytab
+-rw-------. 1 root root 614 Aug 23 12:15 /tmp/kafka.service.keytab
+-rw-------. 1 root root 339 Aug 23 12:14 /tmp/reader.user.keytab
+-rw-------. 1 root root 339 Aug 23 12:15 /tmp/writer.user.keytab
+
