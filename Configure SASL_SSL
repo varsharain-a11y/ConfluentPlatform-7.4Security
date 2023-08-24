@@ -53,6 +53,8 @@ Server {
        user_super="admin-secret"
        user_kafka="kafka-secret";
 }
+export KAFKA_OPTS=-Djava.security.auth.login.config=<path>/zookeeper_server_jaas.conf
+
 
 //clinet.properties
 
