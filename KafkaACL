@@ -1,0 +1,75 @@
+
+
+# kafka-acls --authorizer-properties zookeeper.connect=broker1:2181 --add --allow-principal User:writer --operation Write --topic acl-test
+Warning: support for ACL configuration directly through the authorizer is deprecated and will be removed in a future release. Please use --bootstrap-server instead to set ACLs through the admin client.
+Adding ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:writer, host=*, operation=WRITE, permissionType=ALLOW) 
+
+Current ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=WRITE, permissionType=ALLOW) 
+
+
+
+# kafka-topics --create --topic acl-test --bootstrap-server broker1:9094 --command-config client.properties
+Created topic acl-test
+
+
+
+[root@broker1 ssl]# kafka-acls --authorizer-properties zookeeper.connect=broker1:2181 --add --allow-principal User:reader --allow-principal User:writer --operation Read --group=* --topic acl-test
+Warning: support for ACL configuration directly through the authorizer is deprecated and will be removed in a future release. Please use --bootstrap-server instead to set ACLs through the admin client.
+Adding ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW) 
+
+Adding ACLs for resource `ResourcePattern(resourceType=GROUP, name=*, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW) 
+
+Current ACLs for resource `ResourcePattern(resourceType=GROUP, name=*, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW) 
+
+Current ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW) 
+
+# kafka-acls --authorizer-properties zookeeper.connect=broker1:2181 --add --allow-principal User:writer --operation Write --topic acl-test
+Warning: support for ACL configuration directly through the authorizer is deprecated and will be removed in a future release. Please use --bootstrap-server instead to set ACLs through the admin client.
+Adding ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:writer, host=*, operation=WRITE, permissionType=ALLOW) 
+
+Current ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=WRITE, permissionType=ALLOW) 
+
+
+# kafka-acls --authorizer-properties zookeeper.connect=broker1:2181 --list --topic acl-test
+Warning: support for ACL configuration directly through the authorizer is deprecated and will be removed in a future release. Please use --bootstrap-server instead to set ACLs through the admin client.
+Current ACLs for resource `ResourcePattern(resourceType=TOPIC, name=acl-test, patternType=LITERAL)`: 
+ 	(principal=User:reader, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=READ, permissionType=ALLOW)
+	(principal=User:writer, host=*, operation=WRITE, permissionType=ALLOW) 
+
+
+
+// if using kerberos +ACL then
+if needed check the ticket: 
+klist
+kdestroy 
+kinit -kt /tmp/reader.user.keytab reader ---> for consumer
+kinit -kt /tmp/writer.user.keytab writer ---> producer
+
+
+Do producer/consumer test 
+
+then 
+# kafka-acls --authorizer-properties zookeeper.connect=broker1:2181 --remove --allow-principal User:reader --operation Read --topic acl-test
+
+
+
+
+
+
