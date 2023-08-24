@@ -43,7 +43,7 @@ listener.name.sasl_ssl.plain.sasl.jaas.config=org.apache.kafka.common.security.p
 ssl.client.auth=required
 
 
-
+to configure security in zookeeper:
 // zookeeper.properties
 
 [root@broker1 ssl]# vi /etc/kafka/zookeeper_jaas.conf 
@@ -55,6 +55,20 @@ Server {
 }
 export KAFKA_OPTS=-Djava.security.auth.login.config=<path>/zookeeper_server_jaas.conf
 
+restart zookeeper
+
+//On broker at client details:
+
+vi /etc/kafka/kafka_server_jaas.conf
+
+Client {
+   org.apache.zookeeper.server.auth.DigestLoginModule required
+   username="admin"
+   password="adminsecret";
+};
+~                                                                                                                                                   
+~       
+export KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf
 
 //clinet.properties
 
