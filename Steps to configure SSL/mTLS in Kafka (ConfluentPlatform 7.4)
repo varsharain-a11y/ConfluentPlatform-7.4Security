@@ -29,8 +29,8 @@ ca-cert  ca-cert.srl  ca-key  cert-file  cert-signed  kafka.client.truststore.jk
 On Client:
 
     keytool -keystore kafka.client.keystore.jks -alias client -keyalg RSA -validity 365 -genkey -storepass 123456 -keypass 123456 -dname "CN=broker1.confluentindia.com, O=Confluent India Pvt. Ltd., OU=Technical Support, L=KOL, ST=WestBengal, C=IN, EMAIL=varsharma@confluent.com" -ext SAN=DNS:broker3
-    openssl x509 -req -CA ca-cert -CAkey ca-key -in cert-file -out cert-signed -days 365 -CAcreateserial -passin pass:123456
     keytool -keystore kafka.client.keystore.jks -alias client -certreq -file cert-file
+    openssl x509 -req -CA ca-cert -CAkey ca-key -in cert-file -out cert-signed -days 365 -CAcreateserial -passin pass:123456
     openssl x509 -req -CA ca-cert -CAkey ca-key -in cert-file -out cert-signed -days 365 -CAcreateserial -passin pass:123456
     keytool -keystore kafka.client.keystore.jks -alias CARoot -import -file ca-cert
     keytool -keystore kafka.client.keystore.jks -alias client -import -file cert-signed
