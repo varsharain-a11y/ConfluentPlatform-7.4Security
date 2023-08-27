@@ -1,0 +1,520 @@
+//server.properties
+# ----- Define Listeners ----- #
+
+# Listeners are the ports Kafka uses to communicate. Remember to also include advertised.listeners
+#  if clients have to resolve broker hosts differently than brokers resolve each other.
+
+# PLAINTEXT: Used for testing. No authentication
+# CLIENT: Used for communication from Kafka clients. Uses SASL PLAIN and LdapAuthenticateCallbackHandler to authenticate via LDAP.
+# INTERNAL: Used for broker to broker communication. Uses basic SASL PLAIN authentication.
+# TOKEN: Used for the token authorization service. Uses SASL OAUTHBEARER to manage authorization tokens.
+listeners = CLIENT://kafka:9093,INTERNAL://kafka:9094,TOKEN://kafka:9095
+listener.security.protocol.map = CLIENT:SASL_SSL,INTERNAL:SASL_SSL,TOKEN:SASL_SSL
+
+# HTTP listener for the Metadata Service (MDS) that powers RBAC
+confluent.metadata.server.listeners = https://mds:8090
+confluent.metadata.server.advertised.listeners = https://mds:8090
+
+
+
+# ----- Identity (LDAP in this case) ----- #
+
+# Who even are you? In this environment, we'll use and LDAP directory service to find out.
+
+# Kafka Authenticates to the directory service with the bind user.
+ldap.java.naming.provider.url = ldaps://directory-service:10636
+ldap.java.naming.security.principal=uid=admin,ou=system
+ldap.java.naming.security.credentials=secret
+ldap.java.naming.security.authentication=simple
+# Locate users. Make sure to match these attributes and Object Classes with what's in your directory service.
+ldap.user.search.base=ou=users,dc=confluent,dc=io
+ldap.user.name.attribute=uid
+ldap.user.object.class=inetOrgPerson
+# Search groups for group-based authorization with RBAC. More on that later.
+ldap.search.mode=GROUPS
+ldap.group.search.base=ou=groups,dc=confluent,dc=io
+ldap.group.object.class=groupOfNames
+ldap.group.name.attribute=cn
+ldap.group.member.attribute=member
+ldap.group.member.attribute.pattern=cn=(.*),ou=users,dc=confluent,dc=io
+
+## IMPORTANT for the LdapAuthenticateCallbackHandler:
+## Don't define the ldap.user.password.attribute unless your ldap server doesn't support simple bind.
+## If you use define property, LDAP will do user search and return the password back to Kafka and Kafka will do the password checking.
+## In this case, the LDAP server will return the user's hashed password, so Kafka won't be able to authenticate the user
+##  unless the user's properties file also uses the hashed password.
+
+
+
+# ----- Simple Authentication and Security Layer (SASL) ----- #
+
+# Ok Kafka knows who you claim to be, but doesn't trust you. Prove you are telling the truth!
+# In this environment, we use PLAIN for authenticating Kafka clients to brokers, and for authenticating brokers to each other.
+# OAUTHBEARER is for the token authorization service, NOT for Kafka client authentication. More on token auhtorization later.
+
+sasl.enabled.mechanisms=PLAIN,OAUTHBEARER
+
+
+
+# ----- Kafka Client Authentication ----- #
+
+# This training environment uses LDAP authentication with SASL PLAIN,
+#  which is made possible by the commercial LdapAuthenticateCallbackHandler class.
+
+# Configure client listener, defined earlier with the name CLIENT (hence listener.name.**client**)
+listener.name.client.sasl.enabled.mechanisms=PLAIN
+listener.name.client.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required;
+listener.name.client.plain.sasl.server.callback.handler.class=io.confluent.security.auth.provider.ldap.LdapAuthenticateCallbackHandler
+
+
+
+# ----- Internal Broker to Broker Authentication ----- #
+
+# Even though this is only a single node cluster, MDS requires an internal listener.
+# Authentication for internal broker communication is achieved with SASL PLAIN username/password
+
+inter.broker.listener.name=INTERNAL
+sasl.mechanism.inter.broker.protocol=PLAIN
+# Configure internal listener, defined earlier with the name INTERNAL (hence listener.name.**internal**)
+listener.name.internal.sasl.enabled.mechanisms=PLAIN
+listener.name.internal.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+    username="kafka" \
+    password="kafka-secret" \
+    user_kafka="kafka-secret" \
+    user_mds="mds-secret";
+
+
+
+# ----- Broker to ZooKeeper Authentication ----- #
+
+# This environment uses SASL DIGEST-MD5 for Kafka to ZooKeeper authentication.
+# This is accomplished with zookeeper.jaas and zookeeper-client.jaas files.
+# See `/etc/kafka/`, `systemctl cat confluent-zookeeper`, and `systemctl cat confluent-server`
+
+
+
+# ----- Kafka Client Authorization ----- #
+
+authorizer.class.name=io.confluent.kafka.security.authorizer.ConfluentServerAuthorizer
+confluent.authorizer.access.rule.providers=ZK_ACL,CONFLUENT
+# Super users are internal users to bootstrap authorization. Note the ';' separation.
+super.users=User:kafka;User:mds
+
+
+
+# ----- REST Client Authorization via MDS Token Impersonation ----- #
+
+# Before creating a token, MDS must authenticate the REST client
+confluent.metadata.server.authentication.method=BEARER
+# Configure token listener, defined earlier with the name TOKEN (hence listener.name.**token**)
+listener.name.token.sasl.enabled.mechanisms=OAUTHBEARER
+listener.name.token.oauthbearer.sasl.server.callback.handler.class=io.confluent.kafka.server.plugins.auth.token.TokenBearerValidatorCallbackHandler
+listener.name.token.oauthbearer.sasl.login.callback.handler.class=io.confluent.kafka.server.plugins.auth.token.TokenBearerServerLoginCallbackHandler
+# Path to public key used to validate tokens
+listener.name.token.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
+    publicKeyPath="/home/training/rbac/security/token/public.pem";
+# Path to private key used to create tokens
+confluent.metadata.server.token.key.path=/home/training/rbac/security/token/tokenKeypair.pem
+
+
+
+# ----- Transport Encryption ----- #
+
+# There are many different communication edges in this network graph that must
+#  be secured with TLS encryption.
+
+# The Broker needs a keystore to provide Kafka clients with a trusted certificate
+ssl.keystore.location=/home/training/rbac/security/tls/kafka/kafka.keystore.p12
+ssl.keystore.type=PKCS12
+ssl.keystore.password=confluent
+ssl.key.password=confluent
+
+# The Broker needs a trust store to trust the directory server's certificate
+#  as well as to trust certificates of MDS and other brokers.
+ssl.truststore.location=/home/training/rbac/security/tls/kafka/kafka.truststore.jks
+ssl.truststore.password=confluent
+
+# The connection to the directory service is encrypted over SSL/TLS (hence ldaps://directory-service:10636 in the LDAP connection url)
+ldap.java.naming.security.protocol = SSL
+ldap.ssl.truststore.location = /home/training/rbac/security/tls/kafka/kafka.truststore.jks
+ldap.ssl.truststore.password = confluent
+
+# The http listener for the metadata server is encrypted over SSL/TLS (hence https://mds:8090 in the MDS listener)
+confluent.metadata.server.ssl.keystore.location = /home/training/rbac/security/tls/mds/mds.keystore.p12
+confluent.metadata.server.ssl.keystore.type = PKCS12
+confluent.metadata.server.ssl.keystore.password = confluent
+confluent.metadata.server.ssl.key.password = confluent
+# Include truststore so MDS followers can communicate with MDS leader
+confluent.metadata.server.ssl.truststore.location=/home/training/rbac/security/tls/mds/mds.truststore.jks
+confluent.metadata.server.ssl.truststore.password=confluent
+
+
+
+# ----- Miscellaneous ----- #
+
+# These configurations are not the focus of these training materials.
+
+broker.id=0
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+log.dirs=/kafka-logs
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+num.partitions=1
+num.recovery.threads.per.data.dir=1
+zookeeper.connect=zookeeper:2181
+zookeeper.connection.timeout.ms=18000
+transaction.state.log.min.isr=1
+group.initial.rebalance.delay.ms=0
+# Confluent Control Center and Confluent Auto Data Balancer integration
+metric.reporters=io.confluent.metrics.reporter.ConfluentMetricsReporter
+confluent.metrics.reporter.bootstrap.servers=kafka:9094
+confluent.metrics.reporter.security.protocol=SASL_SSL
+confluent.metrics.reporter.ssl.truststore.location=/home/training/rbac/security/tls/kafka-client/kafka-client.truststore.jks
+confluent.metrics.reporter.ssl.truststore.password=confluent
+confluent.metrics.reporter.sasl.mechanism = PLAIN
+confluent.metrics.reporter.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+    username="kafka" \
+    password="kafka-secret";
+confluent.metrics.reporter.topic.replicas=1
+confluent.support.metrics.enable=true
+confluent.support.customer.id=anonymous
+# Set a bunch of replication factors to 1 for a single node cluster
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+confluent.license.topic.replication.factor=1
+confluent.metadata.topic.replication.factor=1
+confluent.balancer.topic.replication.factor=1
+
+
+
+
+//control-center.properties
+
+################################################
+# ----- Control Center as a Kafka Client ----- #
+################################################
+
+# Control Center analytics is powered by an internal Kafka Streams application
+
+# Must connect to Kafka's token listener for token impersonation (see RBAC section)
+bootstrap.servers = kafka:9095
+confluent.controlcenter.streams.security.protocol= SASL_SSL
+confluent.controlcenter.streams.sasl.mechanism= OAUTHBEARER
+confluent.controlcenter.streams.sasl.login.callback.handler.class= io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler
+confluent.controlcenter.streams.sasl.jaas.config= org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
+        username="control-center" \
+        password="control-center-secret" \
+        metadataServerUrls="https://mds:8090";
+
+
+# ----- TLS Transport Encryption ----- #
+
+# The internal Kafka Streams app must trust the broker's certificate
+
+confluent.controlcenter.streams.ssl.truststore.location= /home/training/rbac/security/tls/control-center/control-center.truststore.jks
+confluent.controlcenter.streams.ssl.truststore.password= confluent
+
+
+
+##################################################
+# ----- Control Center as a RESTful Server ----- #
+##################################################
+
+# Listener for Control Center's web UI
+confluent.controlcenter.rest.listeners=https://control-center:9021
+
+
+# ----- TLS Transport Encryption (HTTPS) ----- #
+
+# Keystore contains Control Center's HTTPS certificate
+confluent.controlcenter.rest.ssl.keystore.location= /home/training/rbac/security/tls/control-center/control-center.keystore.p12
+confluent.controlcenter.rest.ssl.keystore.password= confluent
+confluent.controlcenter.rest.ssl.key.password= confluent
+confluent.controlcenter.rest.ssl.keystore.type=PKCS12
+
+
+
+###############################################
+# ----- Control Center as a REST Client ----- #
+###############################################
+
+# Schema Registry cluster URL
+confluent.controlcenter.schema.registry.url = https://schema-registry:8081
+
+# A comma separated list of Connect host names
+confluent.controlcenter.connect.connect.cluster = https://kafka-connect:8083
+
+# KSQL cluster URL: confluent.controlcenter.ksql.<name you want to appear in control center>.url
+confluent.controlcenter.ksql.ksqlDB.url = https://ksqldb-server:8088
+
+
+# ----- TLS Transport Encryption ----- #
+
+# Control Center trusts schema-registry, ksqldb-server, mds, kafka-connect 
+confluent.controlcenter.rest.ssl.truststore.location= /home/training/rbac/security/tls/control-center/control-center.truststore.jks
+confluent.controlcenter.rest.ssl.truststore.password= confluent
+
+
+
+####################
+# ----- RBAC ----- #
+####################
+
+# Connect to metadata service
+confluent.metadata.bootstrap.server.urls=https://mds:8090
+
+# Authenticate to MDS with directory service credentials
+confluent.metadata.basic.auth.user.info=control-center:control-center-secret
+
+# Enable token impersonation for Control Center clients
+confluent.controlcenter.rest.authentication.method=BEARER
+
+# MDS public key needed to verify json web tokens received from MDS
+public.key.path=/home/training/rbac/security/token/public.pem
+
+
+
+#####################################
+# ----- Miscellaneous Configs ----- #
+#####################################
+
+# These configs are not the focus of these training materials.
+
+# Unique identifier for the Control Center
+confluent.controlcenter.id = 1
+
+# Directory for Control Center to store data
+confluent.controlcenter.data.dir = /confluent/control-center
+
+# License string for the Control Center
+# confluent.license=Xyz
+
+# Settings to enable email alerts
+#confluent.controlcenter.mail.enabled=true
+#confluent.controlcenter.mail.host.name=smtp1
+#confluent.controlcenter.mail.port=587
+#confluent.controlcenter.mail.from=kafka-monitor@example.com
+#confluent.controlcenter.mail.password=abcdefg
+#confluent.controlcenter.mail.starttls.required=true
+
+# Set some internal topic configs. Replication factor is set to 1 for this single node environment.
+confluent.controlcenter.internal.topics.replication = 1
+confluent.controlcenter.internal.topics.partitions = 1
+confluent.controlcenter.command.topic.replication = 1
+confluent.monitoring.interceptor.topic.partitions = 1
+confluent.monitoring.interceptor.topic.replication = 1
+confluent.metrics.topic.partitions = 1
+confluent.metrics.topic.replication = 1
+
+confluent.controlcenter.usage.data.collection.enable = true
+
+# Increase for better throughput on data processing (CPU bound)
+confluent.controlcenter.streams.num.stream.threads = 1
+confluent.controlcenter.streams.consumer.request.timeout.ms= 960032
+
+# Amount of heap to use for internal caches. Increase for better thoughput
+confluent.controlcenter.streams.cache.max.bytes.buffering = 100000000
+
+
+
+//tls setup
+
+#!/bin/bash
+
+# Exit on error and don't allow unset (empty) variables
+set -o nounset \
+    -o errexit \
+#    -o verbose
+#    -o xtrace
+
+#####
+##### Initialize Variables #####
+#####
+
+SOURCE_DIR=/home/training/rbac/security/tls
+mkdir -p $SOURCE_DIR
+pushd $SOURCE_DIR
+
+# Declare directories for keys, certs, truststores, and keystores
+declare -A tlsdirs
+tlsdirs[CA]="certificate-authority"
+tlsdirs[DS]="directory-service"
+tlsdirs[KAFKA]="kafka"
+tlsdirs[MDS]="mds"
+tlsdirs[CLIENT]="kafka-client"
+tlsdirs[SR]="schema-registry"
+tlsdirs[CC]="control-center"
+tlsdirs[KSQL]="ksqldb-server"
+tlsdirs[CONNECT]="kafka-connect"
+tlsdirs[RP]="rest-proxy"
+
+declare -A keystores
+# directory service needs keystore for ldaps
+keystores[DS]="directory-service"
+# kafka needs keystore for TLS encrypted communication with clients
+keystores[KAFKA]="kafka"
+keystores[MDS]="mds"
+# These components need keystores to secure their REST APIs with HTTPS
+keystores[SR]="schema-registry"
+keystores[CC]="control-center"
+keystores[KSQL]="ksqldb-server"
+keystores[CONNECT]="kafka-connect"
+keystores[RP]="rest-proxy"
+
+declare -A truststores
+# kafka needs to trust directory service
+truststores[KAFKA]="kafka"
+# kafka client and CP components need to trust kafka
+truststores[CLIENT]="kafka-client"
+truststores[SR]="schema-registry"
+truststores[CC]="control-center"
+truststores[KSQL]="ksqldb-server"
+truststores[CONNECT]="kafka-connect"
+truststores[RP]="rest-proxy"
+# MDS leader needs to trust MDS followers
+truststores[MDS]="mds"
+
+#####
+##### Define Functions #####
+#####
+
+# Function to clean up files
+function cleanup(){
+    for dir in "${tlsdirs[@]}"; do
+        echo "cleaning ${dir} directory"
+        if [ ! -d "${dir}" ]; then
+            echo "
+            Creating directory ${dir}
+            "
+            mkdir ${dir}
+        else
+            echo "removing contents of ${dir}"
+            rm -f ${dir}/*
+        fi
+    done
+}
+
+# Function to create configuration files in each directory
+function create_cnf(){
+    echo "creating config file"
+    if [ $1 = "${tlsdirs[CA]}" ]
+    then
+        cp ../../scripts/san.cnf "$1"/ca.cnf
+        sed -i -e "s/{}/ca.confluent.io/g" "$1"/ca.cnf
+    else
+        cp ../../scripts/san.cnf "$1"/"$1".cnf
+        sed -i -e "s/{}/"$1"/g" "$1"/"$1".cnf
+    fi   
+}
+
+# Function to create a certificate authority key and certificate
+function create_ca(){
+    echo "creating CA key and certificate"
+    openssl req -new -newkey rsa:2048 -days 365 -extensions v3_ca \
+        -subj '/CN=ca.confluent.io/OU=TEST/O=CONFLUENT/L=PaloAlto/S=Ca/C=US' \
+        -addext "subjectAltName = DNS:ca.confluent.io" \
+        -nodes -x509 -sha256 -set_serial 0 \
+        -keyout "${tlsdirs[CA]}"/ca.key -out "${tlsdirs[CA]}"/ca.crt \
+        -passin pass:confluent -passout pass:confluent
+}
+
+# Function to create a certificate signing request using a new service private key
+# input: service private key
+# output: certificate signing request
+function create_csr(){
+    echo "creating certificate signing request for $1"
+    openssl req -newkey rsa:2048 \
+        -subj "/C=US/ST=CA/L=PaloAlto/O=Confluent/OU=training/CN=$1" \
+        -addext "subjectAltName = DNS:$1" \
+        -nodes -sha256 \
+        -keyout "${1}"/"${1}"-private.key \
+        -out "${1}"/"${1}".csr \
+        -config "${1}"/"${1}".cnf
+}
+
+
+# Function to create server certificate signed by certificate authority
+# input: service's certificate signing request
+# output: signed certificate for service
+function sign_crt(){
+    echo "creating signed certificate for $1"
+    openssl x509 -req -CA "${tlsdirs[CA]}"/ca.crt -CAkey "${tlsdirs[CA]}"/ca.key \
+        -in "${1}"/"${1}".csr \
+        -out "${1}"/"${1}"-signed.crt \
+        -extfile "${1}"/"${1}".cnf \
+        -extensions req_ext \
+        -days 365 -CAcreateserial -passin pass:confluent
+}
+
+
+# Function to make a certificate chain
+# input: signed service certificate and CA certificate
+function create_cert_chain(){
+    echo "creating certificate chain for $1"
+    cat "${1}"/"${1}"-signed.crt \
+        "${tlsdirs[CA]}"/ca.crt > "${1}"/"${1}"-chain.crt
+}
+
+
+# Function to create a .p12 keystore file using cert chain and server private key
+function create_keystore(){
+    echo "creating keystore for $1"
+    openssl pkcs12 -export -in "${1}"/"${1}"-chain.crt \
+        -inkey "${1}"/"${1}"-private.key \
+        -out "${1}"/"${1}".keystore.p12 \
+        -name "${1}" -password pass:confluent
+}
+
+function create_truststore(){
+    echo "creating truststore for $1"
+        keytool -noprompt -keystore "${1}"/"${1}".truststore.jks \
+            -alias CARoot -import -file "${tlsdirs[CA]}"/ca.crt \
+            -storepass confluent -keypass confluent
+}
+
+#####
+##### Main Program #####
+#####
+
+cleanup
+
+for i in "${tlsdirs[@]}"; do
+    create_cnf $i
+done
+
+create_ca
+
+for i in "${keystores[@]}"; do
+    create_csr $i
+    sign_crt $i
+    create_cert_chain $i
+    create_keystore $i
+done
+
+for i in "${truststores[@]}"; do
+    create_truststore $i
+done
+
+
+# Set proper permissions for keystores
+
+chown cp-kafka:confluent $SOURCE_DIR/**/*.keystore*
+chown training:training $SOURCE_DIR/directory-service/directory-service.keystore.p12
+chmod 440 $SOURCE_DIR/**/*.keystore*
+
+# Add ca.crt to system certs under /usr/share/ca-certificates/confluent
+# Doing this makes it so the confluent CLI and ldap clients implicitly trust our CA
+
+mkdir -p /usr/local/share/ca-certificates/confluent
+chmod 777 /usr/local/share/ca-certificates/confluent
+cp $SOURCE_DIR/certificate-authority/ca.crt /usr/local/share/ca-certificates/confluent/
+chmod 644 /usr/local/share/ca-certificates/confluent/ca.crt
+update-ca-certificates
+
+# return to directory where script was invoked
+popd
