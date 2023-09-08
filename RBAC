@@ -1,0 +1,107 @@
+When managing access to Confluent Platform resources, there is an important distinction between two types of clients:
+
+Kafka client
+
+Applications or components that access Kafka brokers directly
+
+Examples:
+
+Kafka Producer and Consumer applications
+
+Kafka Connect workers
+
+ksqlDB servers
+
+Schema Registry
+
+
+REST API client
+
+Confluent Platform has many RESTful services that are accessed via HTTP
+
+Examples:
+
+Creating a Kafka Connect connector
+
+Registering a schema in Schema Registry
+
+Logging into Confluent Control Center
+
+Submitting a ksqlDB query
+
+Creating a consumer via Confluent REST Proxy
+
+RBAC allows for granular access control over both Kafka clients and REST API clients. REST API clients are more difficult to manage access for because they are not directly requesting access to, 
+for example, a Kafka broker. Instead, they are submitting a request to a RESTful service, which in turn requests access to a Kafka broker. In the past, it was impossible to distinguish between different REST API clients of a given service, 
+so authorization was set at the service level rather than the client level. Confluent RBAC overcomes this using token impersonation, 
+
+
+??MDS
+
+The Confluent Metadata Service (MDS) is the software that powers Role Based Access Control. The Metadata server listens for commands via HTTP on the default port 8090.
+MDS maintains a local cache of authorization data that is persisted to an internal Kafka Topic called confluent_metadata. Internally, MDS uses whatever port is configured for inter broker communication (port 9094 in this case). 
+There is an entirely separate listener for the token impersonation service (port 9095 in this lab environment).
+
+//
+Role binding:
+
+"confluent iam rbac role list --output json | jq '.[].name'
+""Operator""
+""ResourceOwner""
+""DeveloperManage""
+""DeveloperRead""
+""DeveloperWrite""
+""AuditAdmin""
+""ClusterAdmin""
+""SecurityAdmin""
+""SystemAdmin""
+""UserAdmin"""	
+	
+" confluent iam rbac role describe SystemAdmin
+     Name     |        Access Policy          
+--------------+-------------------------------
+  SystemAdmin | {                             
+              |   ""scopeType"": ""Cluster"",     
+              |   ""allowedOperations"": [      
+              |     {                         
+              |       ""resourceType"": ""All"",  
+              |       ""operations"": [""All""]   
+              |     }                         
+              |   ]                           
+              | }                             
+              |                       "	
+
+
+List of resources to which these roles are applied to.
+# confluent iam rbac role list \
+    --output json \
+    | jq '.[].accessPolicy.allowedOperations | .[].resourceType' \
+    | sort | uniq
+"All"
+"Cluster"
+"ClusterRegistry"
+"Connector"
+"ControlCenterAlerts"
+"ControlCenterBrokerMetrics"
+"DelegationToken"
+"Group"
+"KsqlCluster"
+"Secret"
+"SecurityMetadata"
+"Subject"
+"Topic"
+"TransactionalId"
+
+check cluster id:
+confluent cluster describe --url http://0.0.0.0:8090
+Confluent Resource Name: zZAvCRqgQ1OZNumPCozEsg
+
+Scope:
+      Type      |           ID            
+----------------+-------------------------
+  kafka-cluster | zZAvCRqgQ1OZNumPCozEsg  
+
+
+
+
+
