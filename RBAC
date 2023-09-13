@@ -102,6 +102,7 @@ Scope:
   kafka-cluster | zZAvCRqgQ1OZNumPCozEsg  
 
 
+//to check rolebindings 
 
-
+confluent iam rbac role-binding list --kafka-cluster zZAvCRqgQ1OZNumPCozEsg --principal User:gauss
 
