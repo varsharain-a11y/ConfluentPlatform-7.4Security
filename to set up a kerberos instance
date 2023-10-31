@@ -202,3 +202,21 @@ listener.name.sasl_ssl.gssapi.sasl.jaas.config=com.sun.security.auth.module.Krb5
   principal="kafka/ec2-54-255-245-50.ap-southeast-1.compute.amazonaws.com@KAFKA.SECURE";
 ssl.client.auth=required
 ssl.endpoint.identification.algorithm=
+
+
+
+
+//client
+
+vi /tmp/kafka_client_jaas.conf
+
+kafkaClient{
+com.security.auth.module.krb5LoginModule required
+useTicketCache=true;
+};
+
+
+vi /tmp/kakfa_clisnt_kerberos.properties
+
+
+
